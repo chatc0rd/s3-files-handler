@@ -4,6 +4,7 @@ import {
   PutObjectCommand,
   type PutObjectCommandInput,
 } from "@aws-sdk/client-s3";
+import crypto from 'crypto'
 
 export const uploadServerImage = async (
   id: string,
