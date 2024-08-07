@@ -1,17 +1,18 @@
 import { relations, sql } from "drizzle-orm";
 import {
+  boolean,
   index,
   integer,
+  json,
+  pgEnum,
   pgTableCreator,
   primaryKey,
   text,
   timestamp,
-  varchar,
   uniqueIndex,
-  pgEnum,
-  json,
-  boolean,
+  varchar,
 } from "drizzle-orm/pg-core";
+import { type AdapterAccount } from "next-auth/adapters";
 
 export const createTable = pgTableCreator((name) => `client_${name}`);
 export const activityEnum = pgEnum("activity", [
@@ -20,6 +21,7 @@ export const activityEnum = pgEnum("activity", [
   "DND",
   "OFFLINE",
 ]);
+export const channelType = pgEnum("channel", ["VOICE", "TEXT"])
 
 export const users = createTable(
   "user",
@@ -47,9 +49,9 @@ export const users = createTable(
   (users) => ({
     uniqueUserDiscriminator: uniqueIndex("unique_user_discriminator").on(
       users.name,
-      users.discriminator
+      users.discriminator,
     ),
-  })
+  }),
 );
 
 export const servers = createTable("server", {
@@ -61,6 +63,47 @@ export const servers = createTable("server", {
     .notNull()
     .references(() => users.id),
 });
+
+export const categories = createTable("category", {
+  id: varchar("id", { length: 255 })
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: varchar("name", { length: 255 }),
+  serverId: varchar("serverId", { length: 255 }).references(() => servers.id),
+});
+
+export const channels = createTable("channel", {
+  id: varchar("id", { length: 255 })
+    .notNull()
+    .primaryKey()
+    .$defaultFn(() => crypto.randomUUID()),
+  name: varchar("name", { length: 255 }),
+  categoryId: varchar("category_id", { length: 255 }).references(
+    () => categories.id,
+  ),
+  serverId: varchar("serverId", { length: 255 }).references(() => servers.id),
+  type: channelType("type").default("TEXT"),
+});
+
+export const categoriesRelations = relations(categories, ({ many, one }) => ({
+  channels: many(channels),
+  server: one(servers, {
+    fields: [categories.serverId],
+    references: [servers.id],
+  }),
+}));
+
+export const channelsRelations = relations(channels, ({ one }) => ({
+  category: one(categories, {
+    fields: [channels.categoryId],
+    references: [categories.id],
+  }),
+  server: one(servers, {
+    fields: [channels.serverId],
+    references: [servers.id],
+  }),
+}));
 
 export const usersToServers = createTable("users_to_servers", {
   userId: varchar("userId", { length: 255 })
@@ -88,6 +131,7 @@ export const serversRelations = relations(servers, ({ one, many }) => ({
     references: [users.id],
   }),
   members: many(usersToServers),
+  categories: many(categories),
 }));
 
 export const usersRelations = relations(users, ({ many }) => ({
@@ -100,7 +144,9 @@ export const accounts = createTable(
     userId: varchar("userId", { length: 255 })
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
-    type: varchar("type", { length: 255 }).notNull(),
+    type: varchar("type", { length: 255 })
+      .$type<AdapterAccount["type"]>()
+      .notNull(),
     provider: varchar("provider", { length: 255 }).notNull(),
     providerAccountId: varchar("providerAccountId", { length: 255 }).notNull(),
     refresh_token: text("refresh_token"),
@@ -116,7 +162,7 @@ export const accounts = createTable(
       columns: [account.provider, account.providerAccountId],
     }),
     userIdIdx: index("account_userId_idx").on(account.userId),
-  })
+  }),
 );
 
 export const accountsRelations = relations(accounts, ({ one }) => ({
@@ -139,7 +185,7 @@ export const sessions = createTable(
   },
   (session) => ({
     userIdIdx: index("session_userId_idx").on(session.userId),
-  })
+  }),
 );
 
 export const sessionsRelations = relations(sessions, ({ one }) => ({
@@ -158,5 +204,5 @@ export const verificationTokens = createTable(
   },
   (vt) => ({
     compoundKey: primaryKey({ columns: [vt.identifier, vt.token] }),
-  })
+  }),
 );

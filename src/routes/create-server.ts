@@ -6,7 +6,7 @@ import { multerMiddleware } from "./middleware/multer";
 import { uploadServerImage } from "./util/s3";
 import { getS3Uri } from "@/utils/get-s3-uri";
 import { db } from "@/db";
-import { servers } from "@/db/schema";
+import { channels, servers } from "@/db/schema";
 const router = Router();
 
 router.post("/create-server", auth, async (req, res) => {
@@ -37,13 +37,29 @@ router.post("/create-server", auth, async (req, res) => {
         iconUrl = audioUri;
       }
 
-      await db.insert(servers).values({
-        id: cuid,
-        ownerId: session?.sub as string,
-        icon: iconUrl,
-        name,
-        public: disoveryPublic,
-      });
+      const newServer = await db
+        .insert(servers)
+        .values({
+          id: cuid,
+          ownerId: session?.sub as string,
+          icon: iconUrl,
+          name,
+          public: disoveryPublic,
+        })
+        .returning();
+
+      await db.insert(channels).values([
+        {
+          serverId: newServer[0].id,
+          name: "general",
+          type: "TEXT",
+        },
+        {
+          serverId: newServer[0].id,
+          name: "voice",
+          type: "VOICE",
+        },
+      ]);
 
       return res.send({
         message: "Server created",
