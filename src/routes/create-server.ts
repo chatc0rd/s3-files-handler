@@ -63,6 +63,7 @@ router.post("/create-server", auth, async (req, res) => {
 
       return res.send({
         message: "Server created",
+        serverInfo: newServer[0],
         success: true,
       });
     });
